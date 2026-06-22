@@ -1,0 +1,10 @@
+{
+    "postgres": {
+        "host": "some-cool-amazonaws-url",
+        "port": 5432,
+        "user": "${APP__SECRET__USER}",
+        "pwd": "${APP__SECRET__PASS}",
+        "data_base": "restaurant",
+        "pool_size": 10
+    }
+}

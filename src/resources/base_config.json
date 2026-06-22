@@ -1,0 +1,14 @@
+{
+    "http": {
+        "port": 8080,
+        "host": "0.0.0.0"
+    },
+    "postgres": {
+        "host": "localhost",
+        "port": 5432,
+        "user": "postgres",
+        "pwd": "postgres",
+        "data_base": "restaurant",
+        "pool_size": 1
+    }
+}
