@@ -1,6 +1,5 @@
-use log::info;
-use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, CONNECTION, CONTENT_TYPE};
+use reqwest::Client;
 use serde_json::json;
 
 pub async fn order_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
@@ -8,13 +7,11 @@ pub async fn order_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let auth_header = "Basic YWRtaW46YWRtaW4xMjM=";
 
-    let get_order_response = client
+    client
         .get(format!("{}/v1/menu", base_url))
         .header(AUTHORIZATION, auth_header)
         .send()
-        .await;
-
-    println!("{:#?}", get_order_response);
+        .await?;
 
     let create_order_body = json!({
         "table_number": 1,
@@ -28,12 +25,9 @@ pub async fn order_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         .header(CONNECTION, "keep-alive")
         .json(&create_order_body)
         .send()
-        .await;
+        .await?;
 
-    info!("Order create response: {:?}", create_response);
-    let r = create_response.unwrap();
-
-    let order_response_json: serde_json::Value = r.json().await?;
+    let order_response_json: serde_json::Value = create_response.json().await?;
     let order_id = order_response_json["id"].as_i64().unwrap() as i32;
 
     let add_items_body = json!({
@@ -74,7 +68,10 @@ pub async fn order_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let order_items: serde_json::Value = order_items_response.json().await?;
-    println!("Order items: {}", serde_json::to_string_pretty(&order_items)?);
+    println!(
+        "Order items: {}",
+        serde_json::to_string_pretty(&order_items)?
+    );
 
     Ok(())
 }

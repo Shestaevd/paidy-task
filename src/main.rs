@@ -52,7 +52,7 @@ async fn main() {
             println!("Order lifecycle test completed successfully!");
         }
     });
-
+    
     HttpServer::new(move || {
         let cors: Cors = Cors::default()
             // should be in scope of prod network, so only other services could have access.
@@ -81,7 +81,7 @@ async fn main() {
             .service(http::routes::get_order_items)
             .service(http::routes::health_check)
     })
-    .bind((host.as_str(), port))
+    .bind(("127.0.0.1", port))
     .unwrap()
     .run()
     .await
