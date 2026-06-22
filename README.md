@@ -34,12 +34,6 @@ cargo test -- --test-threads=1
 
 ---
 
-## 📊 Domain Entities
-
-# Restaurant Order Management System
-
-## Domain Models
-
 ## Design Decisions
 
 ### Order vs Table as Primary Entity
@@ -49,6 +43,10 @@ While the [spec](https://github.com/paidy/interview/blob/master/SimpleRestaurant
 ### Cooking Time
 
 The application doesn't calculate cooking times — this belongs to the kitchen/cook's API, which has domain knowledge of preparation times and manages its own workflow.
+
+## 📊 Domain Entities
+
+# Restaurant Order Management System
 
 ### Roles
 | Column      | Type    | Constraints        | Description                    |
