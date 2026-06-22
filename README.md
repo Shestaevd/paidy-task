@@ -2,7 +2,8 @@
 
 ---
 
-## 🙏 Thank You for this opportunity
+## 🙏 Thank You for this opportunity,
+I had a good chunk of fun implementing something with rust once again.
 
 ---
 
