@@ -135,7 +135,7 @@ This project intentionally avoids traditional unit testing. The philosophy behin
 
 - **Pure Functions Only:** Unit tests are reserved exclusively for pure functions — isolated logic without side effects, I/O, or database calls. This project has very little room for pure unit tests.
 - **Everything Else Is Integration:** API endpoints, database queries, and service interactions are tested as integrated components
-- **Traits for Abstraction:** Database connections are abstracted behind traits, allowing lightweight stubs when unit-level isolation is needed for pure logic verification
+- **When abstraction is needed:** Database connections are abstracted behind traits, allowing lightweight stubs when unit-level isolation is needed for pure logic verification
 
 ### End-to-End Testing with TestContainers
 All API and database tests use **TestContainers** to spin up real PostgreSQL instances in Docker, ensuring tests run against an actual database — no mocks, no surprises in production.
