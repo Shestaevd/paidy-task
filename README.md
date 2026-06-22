@@ -113,12 +113,6 @@ The system uses a simplified role-based access control:
 | Waiter  | Create orders for tables, modify orders assigned to them                    |
 | Cook    | Modify menu items                                                           |
 
-## Database Features
-
-- **Password Encryption**: Uses PostgreSQL `pgcrypto` extension for password hashing
-- **Cascading Deletes**: Order items are automatically deleted when an order is removed
-- **Referential Integrity**: Menu items and users cannot be deleted if they are referenced by orders or order items (RESTRICT)
-
 ## Features
 
 ### 🔐 Authentication
