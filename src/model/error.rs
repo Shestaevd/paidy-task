@@ -2,8 +2,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum HttpError {
-    #[error("Can not find user specified user: ${0}")]
-    NoSuchUserError(String),
     #[error("Can not give access to requested resource for user: ${0}")]
     NoPermissionError(String),
     #[error("Can not find auth header")]

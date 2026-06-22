@@ -37,6 +37,7 @@ pub const GET_ORDER_INFO_QUERY: &str = r#"SELECT
     oi.id,
     o.status,
     o.created_at,
+    o.table_number,
     m.time_to_cook,
     m.dish_title,
     m.cost
@@ -67,4 +68,18 @@ WHERE id = $4;"#;
 pub const DELETE_MENU_QUERY: &str = r#"DELETE FROM menu WHERE id = $1"#;
 
 pub const INSERT_MENU_QUERY: &str =
-    r#"INSERT INTO menu (dish_title, cost, time_to_cook) VALUES ($1, $2, $3)"#;
+    r#"INSERT INTO menu (dish_title, cost, time_to_cook) VALUES ($1, $2, $3) RETURNING id"#;
+
+pub const SELECT_ORDER_FROM_TABLE: &str = r#"SELECT
+    oi.id,
+    o.status,
+    o.created_at,
+    o.table_number,
+    m.time_to_cook,
+    m.dish_title,
+    m.cost
+FROM orders o
+JOIN order_items oi ON o.id = oi.order_id
+JOIN menu m ON oi.menu_position_id = m.id
+WHERE o.table_number = $1
+ORDER BY o.created_at DESC;"#;

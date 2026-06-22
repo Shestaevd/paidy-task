@@ -46,7 +46,7 @@ CREATE TYPE order_status AS ENUM (
     'Cooking',
     'Ready',
     'Served',
-    'Paid,'
+    'Paid',
     'Cancelled'
 );
 

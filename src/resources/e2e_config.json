@@ -2,8 +2,8 @@
   "postgres": {
     "host": "postgres_db",
     "port": 5432,
-    "user": "postgres",
-    "pwd": "postgres",
+    "user": "${APP__POSTGRES__USER}",
+    "pwd": "${APP__POSTGRES__PWD}",
     "data_base": "restaurant",
     "pool_size": 1
   }

@@ -14,7 +14,16 @@ chrono = { version = "0.4", features = ["serde"] }
 actix-web = "4.13.0"
 actix-cors = "0.7.1"
 base64 = "0.22.1"
+prometheus = "0.14.0"
+actix-web-prom = "0.10.0"
+sysinfo = "0.39.5"
+lazy_static = "1.5.0"
+tokio = { version = "1.52.3" }
 
+
+[dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.13.4", features = ["json"] }
 serde_json = "1.0.150"
+testcontainers = { version = "0.27.3", features = ["docker-compose"] }
+rand = "0.10.1"

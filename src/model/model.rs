@@ -5,7 +5,6 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgTypeInfo, PgValueRef};
 use sqlx::{Decode, FromRow, PgPool, Postgres, Type};
-use sqlx::postgres::types::PgInterval;
 
 pub struct AppState {
     pub pool: PgPool
@@ -80,6 +79,7 @@ pub struct OrderInfo {
     pub id: i32,
     pub status: OrderStatus,
     pub created_at: NaiveDateTime,
+    pub table_number: i32,
     pub time_to_cook: i32,
     pub dish_title: String,
     pub cost: i64,
@@ -130,6 +130,16 @@ pub struct HttpCreateOrderResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct HttpCreateMenuItemResponse {
+    pub id: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HttpDeleteOrderResponse {
+    pub entries_deleted: i32,
+}
+
+#[derive(Debug, Serialize)]
 pub struct HttpGetOrdersResponse {
     pub orders: Vec<Order>,
 }
@@ -149,7 +159,6 @@ impl ResponseError for AppError {
     fn status_code(&self) -> StatusCode {
         match self {
             AppError::Http(HttpError::NoAuthHeaderError) => StatusCode::UNAUTHORIZED,
-            AppError::Http(HttpError::NoSuchUserError(_)) => StatusCode::NOT_FOUND,
             AppError::Http(HttpError::NoPermissionError(_)) => StatusCode::FORBIDDEN,
             AppError::Http(HttpError::WrongAuthMethodError(_)) => StatusCode::BAD_REQUEST,
             AppError::Database(DatabaseError::ValueNotFoundError(_)) => StatusCode::NOT_FOUND,

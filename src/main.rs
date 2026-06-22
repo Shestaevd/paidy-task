@@ -6,13 +6,14 @@ use actix_web::{middleware, web, App, HttpServer};
 use log::{error, info, LevelFilter};
 use sqlx::PgPool;
 use std::env;
-use std::time::Duration;
-use crate::test::infinite_test::order_lifecycle;
+use crate::prometheus::system_info_prom;
 
 mod config;
 mod db;
 mod http;
 mod model;
+mod prometheus;
+#[cfg(test)]
 mod test;
 
 #[actix_web::main]
@@ -31,6 +32,8 @@ async fn main() {
             std::process::exit(1);
         });
 
+    system_info_prom::collect_metrics_thread().await;
+
     let host: String = config.http.host.clone();
     let port: u16 = config.http.port;
 
@@ -42,16 +45,6 @@ async fn main() {
         });
 
     info!("starting");
-
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        if let Err(e) = order_lifecycle().await {
-            eprintln!("Order lifecycle test failed: {}", e);
-        } else {
-            println!("Order lifecycle test completed successfully!");
-        }
-    });
     
     HttpServer::new(move || {
         let cors: Cors = Cors::default()
@@ -79,11 +72,13 @@ async fn main() {
             .service(http::routes::delete_order_item)
             .service(http::routes::get_orders)
             .service(http::routes::get_order_items)
+            .service(http::routes::get_order_items_by_table)
             .service(http::routes::health_check)
+            .service(http::routes::metrics)
     })
-    .bind(("127.0.0.1", port))
+    .bind((host.as_str(), port))
     .unwrap()
     .run()
     .await
-    .expect("panic message")
+    .expect("Server shutdown")
 }

@@ -2,24 +2,29 @@ use crate::db::sql_connector;
 use crate::model::error::{AppError, DatabaseError, HttpError};
 use crate::model::model::{
     AppState, AuthenticatedUser, HttpAddOrderItemRequest, HttpCreateMenuItemRequest,
-    HttpCreateOrderRequest, HttpCreateOrderResponse, HttpGetMenuResponse,
-    HttpGetOrderItemsResponse, HttpGetOrdersResponse, HttpUpdateMenuItemRequest,
-    HttpUpdateOrderStatusRequest, MenuItem, Order, OrderInfo, OrderStatus, Role,
+    HttpCreateMenuItemResponse, HttpCreateOrderRequest, HttpCreateOrderResponse,
+    HttpDeleteOrderResponse, HttpGetMenuResponse, HttpGetOrderItemsResponse, HttpGetOrdersResponse,
+    HttpUpdateMenuItemRequest, HttpUpdateOrderStatusRequest, MenuItem, Order, OrderInfo,
+    OrderStatus, Role,
 };
+use crate::prometheus::prom::METRICS;
 use actix_web::web::{Data, Json, Path};
-use actix_web::{HttpRequest, HttpResponse, Responder, delete, get, patch, post};
-use base64::Engine;
+use actix_web::{delete, get, patch, post, HttpRequest, HttpResponse, Responder};
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
+use prometheus::{Encoder, TextEncoder};
 use sqlx::PgPool;
-
 // ------------------------------------ Menu api ------------------------------------------
 
 #[get("/v1/menu")]
 pub async fn get_menu(req: HttpRequest, data: Data<AppState>) -> Result<impl Responder, AppError> {
-    auth_any(req, &data.pool).await?;
-    let menu: Vec<MenuItem> = sql_connector::get_menu(&data.pool).await?;
-    let response = HttpGetMenuResponse { menu };
-    Ok(HttpResponse::Ok().json(response))
+    observe_duration("GET", "/v1/menu", async move || {
+        auth_any(req, &data.pool).await?;
+        let menu: Vec<MenuItem> = sql_connector::get_menu(&data.pool).await?;
+        let response = HttpGetMenuResponse { menu };
+        Ok(HttpResponse::Ok().json(response))
+    })
+    .await
 }
 
 #[post("/v1/menu")]
@@ -28,17 +33,26 @@ pub async fn post_new_menu_item(
     payload: Json<HttpCreateMenuItemRequest>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (_, is_cook) = auth_cook(req, &data.pool).await?;
-    if is_cook {
-        let body: HttpCreateMenuItemRequest = payload.into_inner();
-        sql_connector::insert_menu_item(&data.pool, &body.dish_title, body.cost, body.time_to_cook)
+    observe_duration("POST", "/v1/menu", async move || {
+        let (_, is_cook) = auth_cook(req, &data.pool).await?;
+        if is_cook {
+            let body: HttpCreateMenuItemRequest = payload.into_inner();
+            let id = sql_connector::insert_menu_item(
+                &data.pool,
+                &body.dish_title,
+                body.cost,
+                body.time_to_cook,
+            )
             .await?;
-        Ok(HttpResponse::Created().finish())
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "User is not authorized for this action".to_string(),
-        )))?
-    }
+            let response = HttpCreateMenuItemResponse { id };
+            Ok(HttpResponse::Created().json(response))
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "User is not authorized for this action".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 #[patch("/v1/menu/{item_id}")]
@@ -48,26 +62,29 @@ pub async fn patch_menu_item(
     payload: Json<HttpUpdateMenuItemRequest>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (_, is_cook) = auth_cook(req, &data.pool).await?;
+    observe_duration("PATCH", "/v1/menu/#", async move || {
+        let (_, is_cook) = auth_cook(req, &data.pool).await?;
 
-    if is_cook {
-        let body = payload.into_inner();
+        if is_cook {
+            let body = payload.into_inner();
 
-        sql_connector::update_menu_item(
-            &data.pool,
-            body.cost,
-            body.time_to_cook,
-            body.is_available,
-            path.into_inner(),
-        )
-        .await?;
+            sql_connector::update_menu_item(
+                &data.pool,
+                body.cost,
+                body.time_to_cook,
+                body.is_available,
+                path.into_inner(),
+            )
+            .await?;
 
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "Only administrators can update menu items".to_string(),
-        )))?
-    }
+            Ok(HttpResponse::Ok().finish())
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "Only administrators can update menu items".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 #[delete("/v1/menu/{item_id}")]
@@ -76,16 +93,19 @@ pub async fn delete_menu_item(
     path: Path<i32>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (_, is_cook) = auth_cook(req, &data.pool).await?;
+    observe_duration("DELETE", "/v1/menu/#", async move || {
+        let (_, is_cook) = auth_cook(req, &data.pool).await?;
 
-    if is_cook {
-        sql_connector::delete_menu_item(&data.pool, path.into_inner()).await?;
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "User is not authorized for this action".to_string(),
-        )))?
-    }
+        if is_cook {
+            sql_connector::delete_menu_item(&data.pool, path.into_inner()).await?;
+            Ok(HttpResponse::Ok().finish())
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "User is not authorized for this action".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 // ------------------------------------ Order api ------------------------------------------
@@ -94,10 +114,13 @@ pub async fn get_orders(
     req: HttpRequest,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    auth_any(req, &data.pool).await?;
-    let orders: Vec<Order> = sql_connector::get_orders(&data.pool).await?;
-    let response = HttpGetOrdersResponse { orders };
-    Ok(HttpResponse::Ok().json(response))
+    observe_duration("GET", "/v1/orders", async move || {
+        auth_any(req, &data.pool).await?;
+        let orders: Vec<Order> = sql_connector::get_orders(&data.pool).await?;
+        let response = HttpGetOrdersResponse { orders };
+        Ok(HttpResponse::Ok().json(response))
+    })
+    .await
 }
 
 #[get("/v1/orders/{order_id}")]
@@ -106,12 +129,33 @@ pub async fn get_order_items(
     req: HttpRequest,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    auth_any(req, &data.pool).await?;
-    let order_items: Vec<OrderInfo> =
-        sql_connector::get_order_info(&data.pool, order_id.into_inner()).await?;
-    let response = HttpGetOrderItemsResponse { order_items };
-    Ok(HttpResponse::Ok().json(response))
+    observe_duration("GET", "/v1/orders/#", async move || {
+        auth_any(req, &data.pool).await?;
+        let order_items: Vec<OrderInfo> =
+            sql_connector::get_order_info(&data.pool, order_id.into_inner()).await?;
+        let response = HttpGetOrderItemsResponse { order_items };
+        Ok(HttpResponse::Ok().json(response))
+    })
+    .await
 }
+// this api exists only to satisfy spec requirements
+// From my perspective of data flow, order as entity should be enough.
+#[get("/v1/orders/by_table/{table_id}")]
+pub async fn get_order_items_by_table(
+    table_id: Path<i32>,
+    req: HttpRequest,
+    data: Data<AppState>,
+) -> Result<impl Responder, AppError> {
+    observe_duration("GET", "/v1/orders/by_table/#", async move || {
+        auth_any(req, &data.pool).await?;
+        let order_items: Vec<OrderInfo> =
+            sql_connector::get_order_items_by_table(&data.pool, table_id.into_inner()).await?;
+        let response = HttpGetOrderItemsResponse { order_items };
+        Ok(HttpResponse::Ok().json(response))
+    })
+        .await
+}
+
 
 #[post("/v1/orders")]
 pub async fn post_order(
@@ -119,18 +163,22 @@ pub async fn post_order(
     payload: Json<HttpCreateOrderRequest>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (id, is_waiter) = auth_waiter(req, &data.pool).await?;
-    if is_waiter {
-        let body: HttpCreateOrderRequest = payload.into_inner();
-        let id = sql_connector::create_order(&data.pool, body.table_number, id, body.menu_item_ids)
-            .await?;
-        let response = HttpCreateOrderResponse { id };
-        Ok(HttpResponse::Created().json(response))
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "User is not authorized for this action".to_string(),
-        )))?
-    }
+    observe_duration("POST", "/v1/orders", async move || {
+        let (id, is_waiter) = auth_waiter(req, &data.pool).await?;
+        if is_waiter {
+            let body: HttpCreateOrderRequest = payload.into_inner();
+            let id =
+                sql_connector::create_order(&data.pool, body.table_number, id, body.menu_item_ids)
+                    .await?;
+            let response = HttpCreateOrderResponse { id };
+            Ok(HttpResponse::Created().json(response))
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "User is not authorized for this action".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 #[post("/v1/orders/{order_id}")]
@@ -140,20 +188,24 @@ pub async fn add_order_items(
     payload: Json<HttpAddOrderItemRequest>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
+    observe_duration("POST", "/v1/orders/#", async move || {
+        let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
 
-    if is_waiter {
-        let order_id = path.into_inner();
-        let body = payload.into_inner();
+        if is_waiter {
+            let order_id = path.into_inner();
+            let body = payload.into_inner();
 
-        sql_connector::insert_order_items(&data.pool, order_id, &body.menu_position_ids).await?;
+            sql_connector::insert_order_items(&data.pool, order_id, &body.menu_position_ids)
+                .await?;
 
-        Ok(HttpResponse::Created().finish())
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "User is not authorized for this action".to_string(),
-        )))?
-    }
+            Ok(HttpResponse::Created().finish())
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "User is not authorized for this action".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 #[delete("/v1/orders/items/{order_item_id}")]
@@ -162,16 +214,19 @@ pub async fn delete_order_item(
     path: Path<i32>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
+    observe_duration("DELETE", "/v1/orders/items/#", async move || {
+        let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
 
-    if is_waiter {
-        sql_connector::delete_order_item(&data.pool, path.into_inner()).await?;
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "User is not authorized for this action".to_string(),
-        )))?
-    }
+        if is_waiter {
+            sql_connector::delete_order_item(&data.pool, path.into_inner()).await?;
+            Ok(HttpResponse::Ok().finish())
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "User is not authorized for this action".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 #[delete("/v1/orders/{order_id}")]
@@ -180,16 +235,23 @@ pub async fn delete_order(
     path: Path<i32>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
+    observe_duration("DELETE", "/v1/orders/#", async move || {
+        let (_, is_admin) = auth_admin(req, &data.pool).await?;
 
-    if is_waiter {
-        sql_connector::delete_order(&data.pool, path.into_inner()).await?;
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Err(AppError::Http(HttpError::NoPermissionError(
-            "User is not authorized for this action".to_string(),
-        )))?
-    }
+        if is_admin {
+            let rows_affected =
+                sql_connector::delete_order(&data.pool, path.into_inner()).await? as i32;
+            let response = HttpDeleteOrderResponse {
+                entries_deleted: rows_affected,
+            };
+            Ok(HttpResponse::Ok().json(response))
+        } else {
+            Err(AppError::Http(HttpError::NoPermissionError(
+                "User is not authorized for this action".to_string(),
+            )))?
+        }
+    })
+    .await
 }
 
 #[patch("/v1/orders/{order_id}")]
@@ -199,45 +261,67 @@ pub async fn update_order_status(
     payload: Json<HttpUpdateOrderStatusRequest>,
     data: Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let order_id = path.into_inner();
-    let body: HttpUpdateOrderStatusRequest = payload.into_inner();
+    observe_duration("PATCH", "/v1/orders/#", async move || {
+        let order_id = path.into_inner();
+        let body: HttpUpdateOrderStatusRequest = payload.into_inner();
 
-    match body.status {
-        OrderStatus::Cooking | OrderStatus::Ready => {
-            let (_, is_cook) = auth_cook(req, &data.pool).await?;
-            if !is_cook {
-                return Err(AppError::Http(HttpError::NoPermissionError(
-                    "Only cooks can update cooking status".to_string(),
-                )))?;
+        match body.status {
+            OrderStatus::Cooking | OrderStatus::Ready => {
+                let (_, is_cook) = auth_cook(req, &data.pool).await?;
+                if !is_cook {
+                    return Err(AppError::Http(HttpError::NoPermissionError(
+                        "Only cooks can update cooking status".to_string(),
+                    )))?;
+                }
+            }
+            OrderStatus::Created | OrderStatus::Paid | OrderStatus::Served => {
+                let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
+                if !is_waiter {
+                    return Err(AppError::Http(HttpError::NoPermissionError(
+                        "Only waiters can mark orders as served".to_string(),
+                    )))?;
+                }
+            }
+            OrderStatus::Cancelled => {
+                let (_, is_admin) = auth_admin(req, &data.pool).await?;
+                if !is_admin {
+                    return Err(AppError::Http(HttpError::NoPermissionError(
+                        "Only admins can cancel or mark orders as paid".to_string(),
+                    )))?;
+                }
             }
         }
-        OrderStatus::Created | OrderStatus::Paid | OrderStatus::Served => {
-            let (_, is_waiter) = auth_waiter(req, &data.pool).await?;
-            if !is_waiter {
-                return Err(AppError::Http(HttpError::NoPermissionError(
-                    "Only waiters can mark orders as served".to_string(),
-                )))?;
-            }
-        }
-        OrderStatus::Cancelled => {
-            let (_, is_admin) = auth_admin(req, &data.pool).await?;
-            if !is_admin {
-                return Err(AppError::Http(HttpError::NoPermissionError(
-                    "Only admins can cancel or mark orders as paid".to_string(),
-                )))?;
-            }
-        }
-    }
 
-    let rows_affected =
-        sql_connector::update_order_status(&data.pool, order_id, body.status).await?;
+        let rows_affected =
+            sql_connector::update_order_status(&data.pool, order_id, body.status).await?;
 
-    if rows_affected != 0 {
-        Ok(HttpResponse::Ok().finish())
-    } else {
-        Err(AppError::Database(DatabaseError::ValueNotFoundError(
-            format!("Order not found: {}", order_id),
-        )))?
+        if rows_affected != 0 {
+            Ok(HttpResponse::Ok().finish())
+        } else {
+            Err(AppError::Database(DatabaseError::ValueNotFoundError(
+                format!("Order not found: {}", order_id),
+            )))?
+        }
+    })
+    .await
+}
+
+// --------------------------------------- Utility ---------------------------------------------
+
+#[get("/metrics")]
+async fn metrics() -> HttpResponse {
+    let encoder = TextEncoder::new();
+    let registry = &METRICS.lock().await.registry;
+    let metric_families = registry.gather();
+
+    let mut buffer = Vec::new();
+    match encoder.encode(&metric_families, &mut buffer) {
+        Ok(_) => HttpResponse::Ok()
+            .content_type("text/plain; version=0.0.4; charset=utf-8")
+            .body(buffer),
+        Err(e) => {
+            HttpResponse::InternalServerError().body(format!("Failed to encode metrics: {e}"))
+        }
     }
 }
 
@@ -246,8 +330,24 @@ async fn health_check(_: Data<AppState>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-// ------------------------------------ Auth ------------------------------------------
-// It would be 5 times better to implement this part as Auth middleware, but again, very time consuming
+async fn observe_duration(
+    method: &str,
+    path: &str,
+    func: impl AsyncFnOnce() -> Result<HttpResponse, AppError>,
+) -> Result<impl Responder, AppError> {
+    let timer = METRICS
+        .lock()
+        .await
+        .http_request_duration
+        .with_label_values(&[method, path])
+        .start_timer();
+    let response = func().await;
+    timer.observe_duration();
+    response
+}
+
+// ----------------------------------------- Auth ------------------------------------------
+// It would be 5 times better to implement this part as Auth middleware, very time consuming
 async fn auth_any(req: HttpRequest, pool: &PgPool) -> Result<i32, AppError> {
     auth(req, pool).await.map(|user| user.id)
 }
