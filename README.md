@@ -143,13 +143,6 @@ All API and database tests use **TestContainers** to spin up real PostgreSQL ins
 ### Service Mocking with WireMock
 When external services cannot be containerized (e.g., third-party APIs without Docker images), **WireMock** is used to simulate responses reliably.
 
-| Test Level        | Tool              | Purpose                                        |
-|-------------------|-------------------|------------------------------------------------|
-| Pure functions    | Standard unit tests | Verify isolated business logic               |
-| API endpoints     | TestContainers    | Full HTTP request/response cycles with real DB |
-| Database queries  | TestContainers    | Real PostgreSQL instances                     |
-| External services | WireMock          | Mock HTTP dependencies when Docker unavailable |
-
 ---
 
 ## Infrastructure & Deployment
