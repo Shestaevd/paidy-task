@@ -25,7 +25,6 @@ docker build --network=host -t paidy-restaurant-image:0.1 .
 ```bash
 make build 
 ```
-#### if 'make' is installed
 ### 2. Then
 
 ```bash
